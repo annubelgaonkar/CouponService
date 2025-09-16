@@ -1,16 +1,19 @@
 package dev.anuradha.couponservice.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.anuradha.couponservice.dto.*;
+import dev.anuradha.couponservice.exception.BadRequestException;
 import dev.anuradha.couponservice.model.Coupon;
 import dev.anuradha.couponservice.model.CouponType;
 import dev.anuradha.couponservice.repositories.CouponRepository;
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -19,9 +22,11 @@ import java.util.stream.Collectors;
 public class CouponService {
 
     private final CouponRepository repo;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
+    // Create a coupon with type-specific validation
     public Coupon create(Coupon coupon) {
+        validateCouponDetails(coupon);
         return repo.save(coupon);
     }
 
@@ -35,13 +40,15 @@ public class CouponService {
 
     @Transactional
     public Optional<Coupon> update(String id, Coupon updated) {
+        validateCouponDetails(updated);
+
         return repo.findById(id).map(existing -> {
             existing.setCode(updated.getCode());
             existing.setType(updated.getType());
             existing.setDetails(updated.getDetails());
             existing.setActive(updated.isActive());
             existing.setExpiresAt(updated.getExpiresAt());
-            existing.setUpdatedAt(java.time.Instant.now());
+            existing.setUpdatedAt(Instant.now());
             return existing;
         });
     }
@@ -50,27 +57,48 @@ public class CouponService {
         repo.deleteById(id);
     }
 
-    //calculate discount
+    // Validation
+    private void validateCouponDetails(Coupon coupon) {
+        try {
+            if (coupon.getType() == CouponType.CART) {
+                CartWiseDetailsDto d = objectMapper.readValue(coupon.getDetails(), CartWiseDetailsDto.class);
+                if (d.getThreshold() == null || d.getDiscountType() == null || d.getDiscountValue() == null) {
+                    throw new BadRequestException("Cart coupon requires threshold, discountType and discountValue");
+                }
+            } else if (coupon.getType() == CouponType.PRODUCT) {
+                ProductWiseDetailsDto d = objectMapper.readValue(coupon.getDetails(), ProductWiseDetailsDto.class);
+                if (d.getProductId() == null || d.getDiscountType() == null || d.getDiscountValue() == null) {
+                    throw new BadRequestException("Product coupon requires productId, discountType and discountValue");
+                }
+            } else if (coupon.getType() == CouponType.BXGY) {
+                BxGyDetailsDto d = objectMapper.readValue(coupon.getDetails(), BxGyDetailsDto.class);
+                if (d.getBuyProducts() == null || d.getBuyProducts().isEmpty()
+                        || d.getGetProducts() == null || d.getGetProducts().isEmpty()) {
+                    throw new BadRequestException("BxGy coupon requires buyProducts and getProducts");
+                }
+            }
+        } catch (JsonProcessingException ex) {
+            throw new BadRequestException("Invalid details JSON: " + ex.getMessage());
+        }
+    }
 
+    // calculate discount
     public BigDecimal evaluateDiscountForCoupon(Coupon coupon, CartDto cart) {
         if (!coupon.isActive()) return BigDecimal.ZERO;
-        if (coupon.getExpiresAt() != null && coupon.getExpiresAt()
-                .isBefore(java.time.Instant.now())) return BigDecimal.ZERO;
+        if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(Instant.now()))
+            return BigDecimal.ZERO;
 
         try {
             if (coupon.getType() == CouponType.CART) {
-                CartWiseDetailsDto details = objectMapper.readValue(coupon.getDetails(),
-                        CartWiseDetailsDto.class);
+                CartWiseDetailsDto details = objectMapper.readValue(coupon.getDetails(), CartWiseDetailsDto.class);
                 return evaluateCartWise(details, cart);
 
             } else if (coupon.getType() == CouponType.PRODUCT) {
-                ProductWiseDetailsDto detailsDto = objectMapper.readValue(coupon.getDetails(),
-                        ProductWiseDetailsDto.class);
+                ProductWiseDetailsDto detailsDto = objectMapper.readValue(coupon.getDetails(), ProductWiseDetailsDto.class);
                 return evaluateProductWise(detailsDto, cart);
 
             } else if (coupon.getType() == CouponType.BXGY) {
-                BxGyDetailsDto bxGyDetails = objectMapper.readValue(coupon.getDetails(),
-                        BxGyDetailsDto.class);
+                BxGyDetailsDto bxGyDetails = objectMapper.readValue(coupon.getDetails(), BxGyDetailsDto.class);
                 return evaluateBxGy(bxGyDetails, cart);
             } else {
                 return BigDecimal.ZERO;
@@ -88,7 +116,7 @@ public class CouponService {
 
         if (total.compareTo(detailsDto.getThreshold()) >= 0) {
             if ("PERCENT".equalsIgnoreCase(detailsDto.getDiscountType())) {
-                return total.multiply(detailsDto.getDiscountValue()).divide(BigDecimal.valueOf(100));
+                return total.multiply(detailsDto.getDiscountValue()).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
             } else {
                 return detailsDto.getDiscountValue();
             }
@@ -100,14 +128,11 @@ public class CouponService {
         for (CartItemDto item : cart.getItems()) {
             if (Objects.equals(item.getProductId(), d.getProductId())) {
                 if ("PERCENT".equalsIgnoreCase(d.getDiscountType())) {
-                    BigDecimal itemTotal = item.getPrice().multiply(BigDecimal
-                            .valueOf(item.getQuantity()));
-                    discount = discount.add(itemTotal.multiply(d.getDiscountValue())
-                            .divide(BigDecimal.valueOf(100)));
+                    BigDecimal itemTotal = item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+                    discount = discount.add(itemTotal.multiply(d.getDiscountValue()).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
                 } else {
-                    // FLAT per unit or total? We'll assume FLAT per unit * quantity.
-                    discount = discount.add(d.getDiscountValue()
-                            .multiply(BigDecimal.valueOf(item.getQuantity())));
+                    // FLAT per unit assumed
+                    discount = discount.add(d.getDiscountValue().multiply(BigDecimal.valueOf(item.getQuantity())));
                 }
             }
         }
@@ -115,29 +140,17 @@ public class CouponService {
     }
 
     private BigDecimal evaluateBxGy(BxGyDetailsDto detailsDto, CartDto cart) {
-        // Simple deterministic greedy approach:
-        // 1) Count total buyUnits available from buyProducts
-        // 2) Determine how many times promotion repeats = floor(totalBuyUnits / requiredBuyUnits) limited by repetitionLimit
-        // 3) For each repetition, sum price of matching getProducts available in cart (we'll give free units from matching get products)
+        // Deterministic greedy approach:
         Map<Long, Integer> cartQty = cart.getItems().stream()
-                .collect(Collectors.toMap(CartItemDto::getProductId,
-                        CartItemDto::getQuantity, Integer::sum));
+                .collect(Collectors.toMap(CartItemDto::getProductId, CartItemDto::getQuantity, Integer::sum));
 
-        int totalBuyRequired = detailsDto.getBuyProducts().stream()
+        int buyRequiredPerApply = detailsDto.getBuyProducts().stream()
                 .mapToInt(BxGyDetailsDto.BuyProduct::getQuantity).sum();
-        int totalBuyPresent = detailsDto.getBuyProducts().stream()
-                .mapToInt(bp -> cartQty.getOrDefault(bp.getProductId(),
-                        0) / bp.getQuantity())
-                .sum() * 1; // this counts repeatable sets per product - simpler approach below
+        if (buyRequiredPerApply <= 0) return BigDecimal.ZERO;
 
-        // Simpler approach: compute total buy units across buyProducts by summing quantities
         int totalBuyUnits = detailsDto.getBuyProducts().stream()
                 .mapToInt(bp -> cartQty.getOrDefault(bp.getProductId(), 0))
                 .sum();
-
-        int buyRequiredPerApply = detailsDto.getBuyProducts().stream().mapToInt(BxGyDetailsDto
-                .BuyProduct::getQuantity).sum();
-        if (buyRequiredPerApply <= 0) return BigDecimal.ZERO;
 
         int possibleReps = totalBuyUnits / buyRequiredPerApply;
         if (detailsDto.getRepetitionLimit() != null) {
@@ -145,23 +158,22 @@ public class CouponService {
         }
         if (possibleReps <= 0) return BigDecimal.ZERO;
 
-        // Determine how many get units are present in cart to make free
         int totalGetUnitsAvailable = detailsDto.getGetProducts().stream()
                 .mapToInt(gp -> cartQty.getOrDefault(gp.getProductId(), 0))
                 .sum();
 
-        int totalGetUnitsPerApply = detailsDto.getGetProducts().stream().mapToInt(BxGyDetailsDto
-                .GetProduct::getQuantity).sum();
+        int totalGetUnitsPerApply = detailsDto.getGetProducts().stream()
+                .mapToInt(BxGyDetailsDto.GetProduct::getQuantity).sum();
+
         int totalFreeUnits = Math.min(totalGetUnitsAvailable, possibleReps * totalGetUnitsPerApply);
         if (totalFreeUnits <= 0) return BigDecimal.ZERO;
 
-        // To compute discount amount, choose deterministic mapping: prefer getProducts in the order given.
         BigDecimal discount = BigDecimal.ZERO;
         int remainingFree = totalFreeUnits;
-        // create a map productId -> price from cart
+
         Map<Long, BigDecimal> priceMap = cart.getItems().stream()
-                .collect(Collectors.toMap(CartItemDto::getProductId,
-                        CartItemDto::getPrice, (p1,p2)->p1));
+                .collect(Collectors.toMap(CartItemDto::getProductId, CartItemDto::getPrice, (p1, p2) -> p1));
+
         for (BxGyDetailsDto.GetProduct gp : detailsDto.getGetProducts()) {
             if (remainingFree <= 0) break;
             int available = cartQty.getOrDefault(gp.getProductId(), 0);
@@ -188,7 +200,8 @@ public class CouponService {
         return result;
     }
 
-    // Apply a specific coupon and return updated cart (mutating CartDto items' totalDiscount)
+    // Apply a specific coupon and return updated cart (mutating CartDto items'
+// Apply a specific coupon and return updated cart (mutating CartDto items' totalDiscount)
     public CartDto applyCouponToCart(Coupon coupon, CartDto cart) {
         BigDecimal totalDiscount = evaluateDiscountForCoupon(coupon, cart);
 
@@ -205,31 +218,27 @@ public class CouponService {
                 if (total.compareTo(BigDecimal.ZERO) > 0 && totalDiscount.compareTo(BigDecimal.ZERO) > 0) {
                     for (CartItemDto item : cart.getItems()) {
                         BigDecimal itemTotal = item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-                        BigDecimal share = itemTotal.divide(total, 6,
-                                BigDecimal.ROUND_HALF_UP).multiply(totalDiscount);
+                        BigDecimal share = itemTotal.divide(total, 6, RoundingMode.HALF_UP).multiply(totalDiscount);
                         item.setTotalDiscount(share);
                     }
                 }
             } else if (coupon.getType() == CouponType.PRODUCT) {
-                ProductWiseDetailsDto productWiseDetails = objectMapper.readValue(coupon.getDetails(),
-                        ProductWiseDetailsDto.class);
+                ProductWiseDetailsDto productWiseDetails = objectMapper.readValue(coupon.getDetails(), ProductWiseDetailsDto.class);
                 for (CartItemDto item : cart.getItems()) {
                     if (Objects.equals(item.getProductId(), productWiseDetails.getProductId())) {
                         if ("PERCENT".equalsIgnoreCase(productWiseDetails.getDiscountType())) {
                             BigDecimal itemTotal = item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-                            BigDecimal disc = itemTotal.multiply(productWiseDetails.getDiscountValue())
-                                    .divide(BigDecimal.valueOf(100));
+                            BigDecimal disc = itemTotal.multiply(productWiseDetails.getDiscountValue()).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
                             item.setTotalDiscount(disc);
                         } else {
-                            BigDecimal disc = productWiseDetails
-                                    .getDiscountValue().multiply(BigDecimal.valueOf(item.getQuantity()));
+                            BigDecimal disc = productWiseDetails.getDiscountValue().multiply(BigDecimal.valueOf(item.getQuantity()));
                             item.setTotalDiscount(disc);
                         }
                     }
                 }
             } else if (coupon.getType() == CouponType.BXGY) {
                 BxGyDetailsDto detailsDto = objectMapper.readValue(coupon.getDetails(), BxGyDetailsDto.class);
-                // Similar to evaluation: mark get products free (deterministic order)
+                // mark get products free (deterministic order)
                 Map<Long, Integer> cartQty = cart.getItems().stream()
                         .collect(Collectors.toMap(CartItemDto::getProductId, CartItemDto::getQuantity, Integer::sum));
 
@@ -240,19 +249,20 @@ public class CouponService {
                         .mapToInt(BxGyDetailsDto.BuyProduct::getQuantity).sum();
                 if (buyRequired <= 0) return cart;
                 int possibleReps = totalBuyUnits / buyRequired;
-                if (detailsDto.getRepetitionLimit() != null) possibleReps =
-                        Math.min(possibleReps, detailsDto.getRepetitionLimit());
-                int totalGetUnitsPerApply = detailsDto.getGetProducts().stream().
-                        mapToInt(BxGyDetailsDto.GetProduct::getQuantity).sum();
+                if (detailsDto.getRepetitionLimit() != null)
+                    possibleReps = Math.min(possibleReps, detailsDto.getRepetitionLimit());
+
+                int totalGetUnitsPerApply = detailsDto.getGetProducts().stream()
+                        .mapToInt(BxGyDetailsDto.GetProduct::getQuantity).sum();
+
                 int totalFreeUnits = Math.min(detailsDto.getGetProducts().stream()
-                        .mapToInt(gp -> cartQty.getOrDefault(gp.getProductId(),
-                                0)).sum(), possibleReps * totalGetUnitsPerApply);
+                        .mapToInt(gp -> cartQty.getOrDefault(gp.getProductId(), 0)).sum(), possibleReps * totalGetUnitsPerApply);
                 if (totalFreeUnits <= 0) return cart;
 
                 int remainingFree = totalFreeUnits;
-                // map productId to CartItemDto
                 Map<Long, CartItemDto> cartItemMap = cart.getItems().stream()
-                        .collect(Collectors.toMap(CartItemDto::getProductId, i -> i, (a, b)->a));
+                        .collect(Collectors.toMap(CartItemDto::getProductId, i -> i, (a, b) -> a));
+
                 for (BxGyDetailsDto.GetProduct gp : detailsDto.getGetProducts()) {
                     if (remainingFree <= 0) break;
                     CartItemDto item = cartItemMap.get(gp.getProductId());
@@ -270,6 +280,4 @@ public class CouponService {
         }
         return cart;
     }
-
-
 }

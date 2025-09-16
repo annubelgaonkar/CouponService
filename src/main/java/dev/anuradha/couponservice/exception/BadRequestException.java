@@ -1,4 +1,8 @@
 package dev.anuradha.couponservice.exception;
 
-public class BadRequestException {
+
+public class BadRequestException extends RuntimeException{
+    public BadRequestException(String msg){
+        super(msg);
+    }
 }
