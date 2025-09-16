@@ -1,5 +1,8 @@
 package dev.anuradha.couponservice.controller;
 
+import dev.anuradha.couponservice.dto.CouponMapper;
+import dev.anuradha.couponservice.dto.CouponRequestDto;
+import dev.anuradha.couponservice.dto.CouponResponseDto;
 import dev.anuradha.couponservice.model.Coupon;
 import dev.anuradha.couponservice.service.CouponService;
 import jakarta.validation.Valid;
@@ -9,7 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/coupons")
@@ -17,40 +22,67 @@ import java.util.List;
 public class CouponController {
 
     private final CouponService couponService;
+    private final CouponMapper couponMapper;
 
     //create a coupon
     @PostMapping
-    public ResponseEntity<Coupon> create(@Valid @RequestBody Coupon coupon){
-        Coupon createdCoupon = couponService.create(coupon);
-        return ResponseEntity.status(HttpStatus.CREATED).body(createdCoupon);
+    public ResponseEntity<CouponResponseDto> create(@Valid @RequestBody CouponRequestDto couponRequestDto){
+        //map the requestDto to entity
+        Coupon entity = couponMapper.toEntity(couponRequestDto);
+
+        //save
+        Coupon createdCoupon = couponService.create(entity);
+
+        //map entity to responseDto
+        CouponResponseDto response = couponMapper.toResponse(createdCoupon);
+
+
+        return ResponseEntity.created(URI.create("/api/coupons/" + createdCoupon.getId()))
+                .body(response);
     }
 
-    //Get all coupons
+
+    //Get all coupons list
     @GetMapping
-    public ResponseEntity<List<Coupon>> list(){
-        return ResponseEntity.ok(couponService.listAll());
+    public ResponseEntity<List<CouponResponseDto>> listAll(){
+        List<Coupon> coupons = couponService.listAll();
+        List<CouponResponseDto> responses = coupons.stream()
+                .map(couponMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
     }
 
-    //get by id
+
+    //get coupon by id
     @GetMapping("/{id}")
-    public ResponseEntity<Coupon> get(@PathVariable String id){
+    public ResponseEntity<CouponResponseDto> getById(@PathVariable String id){
         return couponService.findById(id)
+                .map(couponMapper::toResponse)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElse(ResponseEntity.notFound().build());
     }
 
-    //update by id
+    //update coupon by id
     @PutMapping("/{id}")
-    public ResponseEntity<Coupon> update(@PathVariable String id,
-                                         @Valid @RequestBody Coupon coupon){
-        return couponService.update(id, coupon)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<CouponResponseDto> update(@PathVariable String id,
+                                                    @Valid @RequestBody CouponRequestDto coupon){
+
+       Coupon updatedEntity = couponMapper.toEntity(coupon);
+
+       return couponService.update(id, updatedEntity)
+               .map(couponMapper::toResponse)
+               .map(ResponseEntity::ok)
+               .orElse(ResponseEntity.notFound().build());
     }
 
-    //delete by id
+    //delete coupon by id
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id){
+
+        //first check if the coupon to be deleted exists
+        if(couponService.findById(id).isEmpty()){
+            return ResponseEntity.notFound().build();
+        }
         couponService.delete(id);
         return ResponseEntity.noContent().build();
     }
