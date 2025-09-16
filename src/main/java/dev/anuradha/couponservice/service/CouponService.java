@@ -140,7 +140,7 @@ public class CouponService {
         if (buyRequiredPerApply <= 0) return BigDecimal.ZERO;
 
         int possibleReps = totalBuyUnits / buyRequiredPerApply;
-        if (d.getRepetitionLimit() != null) {
+        if (detailsDto.getRepetitionLimit() != null) {
             possibleReps = Math.min(possibleReps, detailsDto.getRepetitionLimit());
         }
         if (possibleReps <= 0) return BigDecimal.ZERO;

@@ -28,7 +28,7 @@ public class CouponController {
     //Get all coupons
     @GetMapping
     public ResponseEntity<List<Coupon>> list(){
-        return ResponseEntity.ok(couponService.couponList());
+        return ResponseEntity.ok(couponService.listAll());
     }
 
     //get by id
