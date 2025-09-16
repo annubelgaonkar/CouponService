@@ -24,9 +24,29 @@ public class CouponService {
     private final CouponRepository repo;
     private final ObjectMapper objectMapper;
 
-    // Create a coupon with type-specific validation
+    // -------------------------
+    // CRUD & validation
+    // -------------------------
+
     public Coupon create(Coupon coupon) {
-        validateCouponDetails(coupon);
+        if (coupon == null) {
+            throw new BadRequestException("coupon payload is required");
+        }
+        if (coupon.getCode() == null || coupon.getCode().trim().isEmpty()) {
+            throw new BadRequestException("coupon.code is required");
+        }
+        if (coupon.getType() == null) {
+            throw new BadRequestException("coupon.type is required");
+        }
+
+        // validate details (required on create)
+        validateCouponDetailsForCreate(coupon);
+
+        // optional: ensure unique code
+        repo.findByCode(coupon.getCode()).ifPresent(existing -> {
+            throw new BadRequestException("coupon code already exists: " + coupon.getCode());
+        });
+
         return repo.save(coupon);
     }
 
@@ -40,12 +60,17 @@ public class CouponService {
 
     @Transactional
     public Optional<Coupon> update(String id, Coupon updated) {
-        validateCouponDetails(updated);
-
         return repo.findById(id).map(existing -> {
-            existing.setCode(updated.getCode());
-            existing.setType(updated.getType());
-            existing.setDetails(updated.getDetails());
+            // validate only when type or details are provided (support partial updates)
+            if (updated.getType() != null || updated.getDetails() != null) {
+                CouponType effectiveType = (updated.getType() != null) ? updated.getType() : existing.getType();
+                String detailsToValidate = (updated.getDetails() != null) ? updated.getDetails() : existing.getDetails();
+                validateCouponDetailsForUpdate(effectiveType, detailsToValidate);
+            }
+
+            if (updated.getCode() != null) existing.setCode(updated.getCode());
+            if (updated.getType() != null) existing.setType(updated.getType());
+            if (updated.getDetails() != null) existing.setDetails(updated.getDetails());
             existing.setActive(updated.isActive());
             existing.setExpiresAt(updated.getExpiresAt());
             existing.setUpdatedAt(Instant.now());
@@ -57,33 +82,77 @@ public class CouponService {
         repo.deleteById(id);
     }
 
-    // Validation
-    private void validateCouponDetails(Coupon coupon) {
+    // -------------------------
+    // Validation helpers
+    // -------------------------
+
+    private void validateCouponDetailsForCreate(Coupon coupon) {
+        if (coupon == null) throw new BadRequestException("coupon is required");
+        if (coupon.getType() == null) throw new BadRequestException("coupon.type is required");
+        if (coupon.getDetails() == null || coupon.getDetails().trim().isEmpty()) {
+            throw new BadRequestException("details JSON is required for coupon type " + coupon.getType());
+        }
+        validateDetailsForType(coupon.getType(), coupon.getDetails());
+    }
+
+    private void validateCouponDetailsForUpdate(CouponType type, String details) {
+        if (type == null) return;
+        if (details == null || details.trim().isEmpty()) {
+            // allow missing details on update (we'll keep existing details)
+            return;
+        }
+        validateDetailsForType(type, details);
+    }
+
+    private void validateDetailsForType(CouponType type, String detailsJson) {
+        if (type == null) throw new BadRequestException("coupon type is required for validation");
+        if (detailsJson == null || detailsJson.trim().isEmpty())
+            throw new BadRequestException("details JSON is required for type " + type);
+
         try {
-            if (coupon.getType() == CouponType.CART) {
-                CartWiseDetailsDto d = objectMapper.readValue(coupon.getDetails(), CartWiseDetailsDto.class);
-                if (d.getThreshold() == null || d.getDiscountType() == null || d.getDiscountValue() == null) {
-                    throw new BadRequestException("Cart coupon requires threshold, discountType and discountValue");
+            switch (type) {
+                case CART -> {
+                    CartWiseDetailsDto d = objectMapper.readValue(detailsJson, CartWiseDetailsDto.class);
+                    if (d.getThreshold() == null || d.getDiscountType() == null || d.getDiscountValue() == null) {
+                        throw new BadRequestException("Cart coupon requires threshold, discountType and discountValue");
+                    }
                 }
-            } else if (coupon.getType() == CouponType.PRODUCT) {
-                ProductWiseDetailsDto d = objectMapper.readValue(coupon.getDetails(), ProductWiseDetailsDto.class);
-                if (d.getProductId() == null || d.getDiscountType() == null || d.getDiscountValue() == null) {
-                    throw new BadRequestException("Product coupon requires productId, discountType and discountValue");
+                case PRODUCT -> {
+                    ProductWiseDetailsDto d = objectMapper.readValue(detailsJson, ProductWiseDetailsDto.class);
+                    if (d.getProductId() == null || d.getDiscountType() == null || d.getDiscountValue() == null) {
+                        throw new BadRequestException("Product coupon requires productId, discountType and discountValue");
+                    }
                 }
-            } else if (coupon.getType() == CouponType.BXGY) {
-                BxGyDetailsDto d = objectMapper.readValue(coupon.getDetails(), BxGyDetailsDto.class);
-                if (d.getBuyProducts() == null || d.getBuyProducts().isEmpty()
-                        || d.getGetProducts() == null || d.getGetProducts().isEmpty()) {
-                    throw new BadRequestException("BxGy coupon requires buyProducts and getProducts");
+                case BXGY -> {
+                    BxGyDetailsDto d = objectMapper.readValue(detailsJson, BxGyDetailsDto.class);
+                    if (d.getBuyProducts() == null || d.getBuyProducts().isEmpty()
+                            || d.getGetProducts() == null || d.getGetProducts().isEmpty()) {
+                        throw new BadRequestException("BxGy coupon requires buyProducts and getProducts");
+                    }
+                    d.getBuyProducts().forEach(bp -> {
+                        if (bp.getProductId() == null || bp.getQuantity() == null || bp.getQuantity() <= 0) {
+                            throw new BadRequestException("each buyProduct must have productId and positive quantity");
+                        }
+                    });
+                    d.getGetProducts().forEach(gp -> {
+                        if (gp.getProductId() == null || gp.getQuantity() == null || gp.getQuantity() <= 0) {
+                            throw new BadRequestException("each getProduct must have productId and positive quantity");
+                        }
+                    });
                 }
+                default -> throw new BadRequestException("Unknown coupon type: " + type);
             }
         } catch (JsonProcessingException ex) {
-            throw new BadRequestException("Invalid details JSON: " + ex.getMessage());
+            throw new BadRequestException("Invalid details JSON: " + ex.getOriginalMessage());
         }
     }
 
-    // calculate discount
+    // -------------------------
+    // Evaluation logic
+    // -------------------------
+
     public BigDecimal evaluateDiscountForCoupon(Coupon coupon, CartDto cart) {
+        if (coupon == null) return BigDecimal.ZERO;
         if (!coupon.isActive()) return BigDecimal.ZERO;
         if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(Instant.now()))
             return BigDecimal.ZERO;
@@ -104,7 +173,7 @@ public class CouponService {
                 return BigDecimal.ZERO;
             }
         } catch (Exception e) {
-            // parsing error - treat as non-applicable
+            // parsing or other error - treat as non-applicable
             return BigDecimal.ZERO;
         }
     }
@@ -114,6 +183,7 @@ public class CouponService {
                 .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        if (detailsDto.getThreshold() == null) return BigDecimal.ZERO;
         if (total.compareTo(detailsDto.getThreshold()) >= 0) {
             if ("PERCENT".equalsIgnoreCase(detailsDto.getDiscountType())) {
                 return total.multiply(detailsDto.getDiscountValue()).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
@@ -187,7 +257,10 @@ public class CouponService {
         return discount;
     }
 
-    // Evaluate all coupons and return list of coupon -> discount
+    // -------------------------
+    // Apply / applicable endpoints helpers
+    // -------------------------
+
     public Map<String, BigDecimal> applicableCouponsForCart(CartDto cart) {
         List<Coupon> coupons = repo.findAll();
         Map<String, BigDecimal> result = new LinkedHashMap<>();
@@ -200,8 +273,9 @@ public class CouponService {
         return result;
     }
 
-    // Apply a specific coupon and return updated cart (mutating CartDto items'
-// Apply a specific coupon and return updated cart (mutating CartDto items' totalDiscount)
+    /**
+     * Apply a specific coupon and return updated cart (mutates CartDto items' totalDiscount).
+     */
     public CartDto applyCouponToCart(Coupon coupon, CartDto cart) {
         BigDecimal totalDiscount = evaluateDiscountForCoupon(coupon, cart);
 
@@ -211,7 +285,6 @@ public class CouponService {
         try {
             if (coupon.getType() == CouponType.CART) {
                 CartWiseDetailsDto detailsDto = objectMapper.readValue(coupon.getDetails(), CartWiseDetailsDto.class);
-                // distribute discount proportionally to item totals
                 BigDecimal total = cart.getItems().stream()
                         .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -238,7 +311,6 @@ public class CouponService {
                 }
             } else if (coupon.getType() == CouponType.BXGY) {
                 BxGyDetailsDto detailsDto = objectMapper.readValue(coupon.getDetails(), BxGyDetailsDto.class);
-                // mark get products free (deterministic order)
                 Map<Long, Integer> cartQty = cart.getItems().stream()
                         .collect(Collectors.toMap(CartItemDto::getProductId, CartItemDto::getQuantity, Integer::sum));
 
@@ -276,7 +348,7 @@ public class CouponService {
                 }
             }
         } catch (Exception ex) {
-            // ignore parse errors - leave discounts as zero
+            // leave discounts as zero
         }
         return cart;
     }

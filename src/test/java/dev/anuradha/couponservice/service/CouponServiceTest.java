@@ -5,32 +5,24 @@ import dev.anuradha.couponservice.dto.*;
 import dev.anuradha.couponservice.model.Coupon;
 import dev.anuradha.couponservice.model.CouponType;
 import dev.anuradha.couponservice.repositories.CouponRepository;
-import lombok.RequiredArgsConstructor;
-import org.checkerframework.checker.units.qual.C;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
-@RequiredArgsConstructor
 class CouponServiceTest {
 
-    @Mock
-    CouponRepository repo;
-
-    @InjectMocks
-    CouponService service;
-
-    private final ObjectMapper objectMapper;
+    private CouponRepository repo;
+    private CouponService service;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp(){
+        repo = mock(CouponRepository.class);
+        objectMapper = new ObjectMapper();
         service = new CouponService(repo, objectMapper);
     }
 
