@@ -29,7 +29,6 @@ public class Coupon {
     @Column(name = "type", nullable = false)
     private CouponType type;                             // cart, product, buy x get y
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     private String details;
 

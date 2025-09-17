@@ -1,4 +1,4 @@
-# Coupon Service - Monk Commerce Backend Assignment
+# Coupon Service - Assignment
 
 ## Overview
 This project implements a backend service for managing and applying discount coupons in an e-commerce setting.  
@@ -161,6 +161,5 @@ Tests include:
 
 ---
 
-## Author
-Assignment solution by **Anuradha Belgaonkar**  
-Built as part of Monk Commerce Backend Developer assignment (2025).
+## Author **Anuradha Belgaonkar**  
+
