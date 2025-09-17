@@ -151,6 +151,40 @@ Tests include:
 
 ---
 
+## Postman Collection
+A ready-to-import Postman collection is provided in the postman/ folder:
+
+- File: postman/CouponService_Postman_Collection_With_Tests.json
+
+## How to use
+
+- Start the app (example using H2 in-memory DB):
+
+```json
+java -jar target/CouponService-0.0.1-SNAPSHOT.jar \
+  --spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE \
+  --spring.datasource.driver-class-name=org.h2.Driver \
+  --spring.datasource.username=sa \
+  --spring.datasource.password= \
+  --spring.jpa.hibernate.ddl-auto=create-drop
+```
+- Import the Postman collection into Postman.
+
+- Set the environment variable baseUrl to http://localhost:8080.
+
+- Run requests in order:
+
+-- Create coupons (CART, PRODUCT, BXGY).
+
+--List coupons.
+
+-- POST /api/applicable-coupons to see applicable coupons.
+
+-- POST /api/apply-coupon/{id} to apply a coupon.
+
+The collection also includes Postman tests that check status codes, IDs, and discount application.
+---
+
 ## Future Improvements
 - Store `details` as JSONB in Postgres for querying and indexing.
 - Add API auth (JWT, roles).
