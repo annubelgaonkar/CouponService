@@ -1,0 +1,22 @@
+# Ignore target build output
+/target/
+
+# Ignore IDE specific files
+/.idea/
+*.iml
+
+# Ignore logs and temp
+*.log
+/tmp/
+/*.tmp
+
+# Maven wrapper cache
+.mvn/wrapper/maven-wrapper.jar
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keep Postman collections (ensure tracked)
+!postman/
+!postman/*.json
