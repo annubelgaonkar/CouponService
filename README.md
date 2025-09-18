@@ -1,8 +1,8 @@
 # Coupon Service - Assignment
 
 ## Overview
-This project implements a backend service for managing and applying discount coupons in an e-commerce setting.  
-It was built using **Java 17**, **Spring Boot**, **PostgreSQL (or H2 for testing)**, **JPA**, **Lombok**, and **JUnit 5 + Mockito** for unit tests.
+This assignment implements a backend service for managing and applying discount coupons in an e-commerce setting.  
+It is built using **Java 17**, **Spring Boot**, **PostgreSQL (or H2 for testing)**, **JPA**, **Lombok**, and **JUnit 5 + Mockito** for unit tests.
 
 The service supports:
 - CRUD operations for coupons
@@ -39,11 +39,9 @@ The service supports:
   - Product-wise: discount applied per unit/percent.
   - BxGy: eligible get-products marked with free-unit discounts.
 - Unit tests (JUnit + Mockito) covering:
-  - Validation failures
-  - Expired/inactive coupons
-  - Cart-wise, product-wise, and BxGy evaluation
-  - Apply logic distribution & rounding
-  - Edge cases (repetition limit, insufficient get-products, mixed buy-products)
+  - Controller-level tests for Coupon CRUD APIs.
+  - Service-level tests for core coupon evaluation and apply logic.
+  - Application startup test to verify Spring Boot context loads.
 
 ---
 
@@ -176,32 +174,21 @@ Response:
 ```bash
 # clone repo
 git clone <repo-url>
-cd coupon-service
+cd cd CouponService
 
 # build & run tests
-mvn clean test
+./mvnw clean test
 
 # run locally
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 ### Run with H2 (in-memory DB)
-```bash
-java -jar target/CouponService-0.0.1-SNAPSHOT.jar \
- --spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE \
- --spring.datasource.driver-class-name=org.h2.Driver \
- --spring.datasource.username=sa \
- --spring.datasource.password= \
- --spring.jpa.hibernate.ddl-auto=create-drop
-```
+This uses `src/main/resources/application-local.properties`.
 
-### Run with Postgres
 ```bash
-export SERVER_URL_LOCAL=jdbc:postgresql://localhost:5432/coupondb
-export DB_USERNAME=postgres
-export DB_PASSWORD=postgres
+java -jar target/CouponService-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
 
-java -jar target/CouponService-0.0.1-SNAPSHOT.jar
 ```
 
 Default server port: `8080`. Override with `--server.port=XXXX`.
@@ -211,33 +198,27 @@ Default server port: `8080`. Override with `--server.port=XXXX`.
 ## Unit Tests
 Run:
 ```bash
-mvn test
+./mvnw test
 ```
-Tests include:
-- `CouponServiceTest` – evaluation logic
-- `CouponApplyTest` – apply logic distribution
-- `CouponValidationTest` – validation failures
-- `CouponExpiryTest` – inactive/expired coupons
-- `BxGyEdgeCasesTest` – repetition, insufficient get-products, mixed buy-products
-- `ApplyDistributionTest` – cart-wise proportional, product-wise percent/flat
+  Tests include:
+- `CouponControllerTest` – controller layer (MockMvc) test for creating a coupon (`POST /api/coupons`).
+- `CouponServiceTest` – service-level unit tests for coupon evaluation logic:
+    - Cart-wise percent discount
+    - Product-wise percent discount
+    - Basic BxGy evaluation with repetition limit
+- `CouponServiceApplicationTests` – verifies that the Spring Boot application context loads successfully.
+
 
 ---
 
-## Postman Collection
-A ready-to-import Postman collection is provided in the `postman/` folder:  
-**File**: `postman/CouponService_Postman_Collection_With_Tests.json`
-
 ### Usage
-1. Start the app (e.g. with H2 in-memory DB, see above).  
-2. Import the Postman collection into Postman.  
-3. Set environment variable `baseUrl` to `http://localhost:8080`.  
-4. Run requests in order:  
+1. Start the app (e.g. with H2 in-memory DB, see above).
+2. Set environment variable `baseUrl` to `http://localhost:8080`.  
+3. Run requests in order:  
    - Create coupons (CART, PRODUCT, BXGY)  
    - List coupons  
    - `POST /api/applicable-coupons`  
-   - `POST /api/apply-coupon/{id}`  
-
-Collection includes tests for status codes, IDs, and discount application.
+   - `POST /api/apply-coupon/{id}`
 
 ---
 

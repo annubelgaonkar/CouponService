@@ -8,6 +8,8 @@ import dev.anuradha.couponservice.model.Coupon;
 import dev.anuradha.couponservice.model.CouponType;
 import dev.anuradha.couponservice.repositories.CouponRepository;
 import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,23 +29,24 @@ public class CouponService {
     // CRUD & validation
 
     public Coupon create(Coupon coupon) {
-        if (coupon == null) {
-            throw new BadRequestException("coupon payload is required");
+        try {
+            String raw = coupon.getDetails();
+            if (raw != null && !raw.isBlank()) {
+                JsonNode node = objectMapper.readTree(raw);
+                if (node.has("discount") && !node.has("discountValue")) {
+                    ObjectNode obj = (ObjectNode) node;
+                    obj.put("discountType", "PERCENT");
+                    obj.set("discountValue", obj.get("discount"));
+                    obj.remove("discount");
+                    coupon.setDetails(objectMapper.writeValueAsString(obj));
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid details JSON", e);
         }
-        if (coupon.getCode() == null || coupon.getCode().trim().isEmpty()) {
-            throw new BadRequestException("coupon.code is required");
-        }
-        if (coupon.getType() == null) {
-            throw new BadRequestException("coupon.type is required");
-        }
-
-        validateCouponDetailsForCreate(coupon);
-
-        repo.findByCode(coupon.getCode()).ifPresent(existing -> {
-            throw new BadRequestException("coupon code already exists: " + coupon.getCode());
-        });
 
         return repo.save(coupon);
+
     }
 
     public List<Coupon> listAll() {
@@ -55,23 +58,31 @@ public class CouponService {
     }
 
     @Transactional
-    public Optional<Coupon> update(String id, UpdateCouponDto dto) {
+    public Optional<Coupon> update(String id, UpdateCouponDto couponDto) {
         return repo.findById(id).map(existing -> {
-            // Validate only when type/details provided
-            if (dto.getType() != null || dto.getDetails() != null) {
-                CouponType effectiveType = (dto.getType() != null) ? CouponType.valueOf(dto.getType()) : existing.getType();
-                String detailsToValidate = (dto.getDetails() != null) ? dto.getDetails() : existing.getDetails();
-                validateCouponDetailsForUpdate(effectiveType, detailsToValidate);
+            if (couponDto.getCode() != null) existing.setCode(couponDto.getCode());
+            if (couponDto.getType() != null) existing.setType(CouponType
+                    .valueOf(couponDto.getType()));
+            if (couponDto.getDetails() != null) {
+                String raw = couponDto.getDetails();
+                try {
+                    JsonNode node = objectMapper.readTree(raw);
+                    if (node.has("discount") && !node.has("discountValue")) {
+                        ObjectNode obj = (ObjectNode) node;
+                        obj.put("discountType", "PERCENT");
+                        obj.set("discountValue", obj.get("discount"));
+                        obj.remove("discount");
+                        raw = objectMapper.writeValueAsString(obj);
+                    }
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Invalid details JSON", e);
+                }
+                existing.setDetails(raw);
             }
+            if (couponDto.getActive() != null) existing.setActive(couponDto.getActive());
+            if (couponDto.getExpiresAt() != null) existing.setExpiresAt(couponDto.getExpiresAt());
 
-            if (dto.getCode() != null) existing.setCode(dto.getCode());
-            if (dto.getType() != null) existing.setType(CouponType.valueOf(dto.getType()));
-            if (dto.getDetails() != null) existing.setDetails(dto.getDetails());
-            if (dto.getActive() != null) existing.setActive(dto.getActive()); // safe
-            if (dto.getExpiresAt() != null) existing.setExpiresAt(dto.getExpiresAt());
-
-            existing.setUpdatedAt(Instant.now());
-            return existing;
+            return repo.save(existing);
         });
     }
 
