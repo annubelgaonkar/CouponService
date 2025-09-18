@@ -7,7 +7,6 @@ import dev.anuradha.couponservice.dto.CartWiseDetailsDto;
 import dev.anuradha.couponservice.model.Coupon;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;

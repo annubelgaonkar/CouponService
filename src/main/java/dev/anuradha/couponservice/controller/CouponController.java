@@ -7,10 +7,7 @@ import dev.anuradha.couponservice.dto.UpdateCouponDto;
 import dev.anuradha.couponservice.model.Coupon;
 import dev.anuradha.couponservice.model.CouponType;
 import dev.anuradha.couponservice.service.CouponService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

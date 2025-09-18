@@ -1,6 +1,5 @@
 package dev.anuradha.couponservice.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.anuradha.couponservice.dto.CartDto;
 import dev.anuradha.couponservice.dto.CartItemDto;
@@ -8,7 +7,6 @@ import dev.anuradha.couponservice.dto.ProductWiseDetailsDto;
 import dev.anuradha.couponservice.model.Coupon;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
