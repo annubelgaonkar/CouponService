@@ -3,7 +3,9 @@ package dev.anuradha.couponservice.controller;
 import dev.anuradha.couponservice.dto.CouponMapper;
 import dev.anuradha.couponservice.dto.CouponRequestDto;
 import dev.anuradha.couponservice.dto.CouponResponseDto;
+import dev.anuradha.couponservice.dto.UpdateCouponDto;
 import dev.anuradha.couponservice.model.Coupon;
+import dev.anuradha.couponservice.model.CouponType;
 import dev.anuradha.couponservice.service.CouponService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +28,7 @@ public class CouponController {
 
     //create a coupon
     @PostMapping
-    public ResponseEntity<CouponResponseDto> create(@Valid @RequestBody CouponRequestDto couponRequestDto){
+    public ResponseEntity<CouponResponseDto> create(@RequestBody CouponRequestDto couponRequestDto){
         //map the requestDto to entity
         Coupon entity = couponMapper.toEntity(couponRequestDto);
 
@@ -64,15 +66,26 @@ public class CouponController {
 
     //update coupon by id
     @PutMapping("/{id}")
-    public ResponseEntity<CouponResponseDto> update(@PathVariable String id,
-                                                    @Valid @RequestBody CouponRequestDto coupon){
+    public ResponseEntity<?> updateCoupon(@PathVariable String id,
+                                          @RequestBody UpdateCouponDto couponDto){
 
-       Coupon updatedEntity = couponMapper.toEntity(coupon);
+        Coupon updated = new Coupon();
+        if (couponDto.getCode() != null) updated.setCode(couponDto.getCode());
+        if (couponDto.getType() != null) {
+            try {
+                updated.setType(CouponType.valueOf(couponDto.getType()));
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body("Invalid coupon type: " + couponDto.getType());
+            }
+        }
+        if (couponDto.getDetails() != null) updated.setDetails(couponDto.getDetails());
+        if (couponDto.getActive() != null) updated.setActive(couponDto.getActive());
+        if (couponDto.getExpiresAt() != null) updated.setExpiresAt(couponDto.getExpiresAt());
 
-       return couponService.update(id, updatedEntity)
-               .map(couponMapper::toResponse)
-               .map(ResponseEntity::ok)
-               .orElse(ResponseEntity.notFound().build());
+        return couponService.update(id, couponDto)
+                .map(c -> ResponseEntity.ok(couponMapper
+                        .toResponse(c)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     //delete coupon by id

@@ -129,6 +129,13 @@ mvn clean test
 mvn spring-boot:run
 ```
 
+### Run with local profile (H2 in-memory, for reviewers)
+This uses `src/main/resources/application-local.properties`.
+
+```bash
+java -jar target/CouponService-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
+```
+
 Default server port: **8080**.  
 
 Use Postman or curl to hit endpoints.

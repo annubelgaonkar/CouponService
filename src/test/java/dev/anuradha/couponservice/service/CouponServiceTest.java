@@ -8,7 +8,9 @@ import dev.anuradha.couponservice.repositories.CouponRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -21,9 +23,16 @@ class CouponServiceTest {
 
     @BeforeEach
     void setUp(){
-        repo = mock(CouponRepository.class);
         objectMapper = new ObjectMapper();
-        service = new CouponService(repo, objectMapper);
+
+        repo = mock(CouponRepository.class);
+
+        Map<CouponType, Evaluator> evaluatorMap = new EnumMap<>(CouponType.class);
+        evaluatorMap.put(CouponType.CART, new CartWiseEvaluator(objectMapper));
+        evaluatorMap.put(CouponType.PRODUCT, new ProductWiseEvaluator(objectMapper));
+        evaluatorMap.put(CouponType.BXGY, new BxGyEvaluator(objectMapper));
+
+        service = new CouponService(evaluatorMap, repo, objectMapper);
     }
 
     @Test
