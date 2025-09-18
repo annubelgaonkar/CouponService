@@ -167,14 +167,14 @@ Response:
 
 ### Requirements
 - Java 17+
-- Maven 3+
-- PostgreSQL (optional; H2 used for tests)
+- PostgreSQL (optional; H2 used for local profile and tests)
+- Maven is not required (Maven wrapper `mvnw` is included)
 
 ### Steps
 ```bash
 # clone repo
 git clone <repo-url>
-cd cd CouponService
+cd CouponService
 
 # build & run tests
 ./mvnw clean test
@@ -207,6 +207,8 @@ Run:
     - Product-wise percent discount
     - Basic BxGy evaluation with repetition limit
 - `CouponServiceApplicationTests` – verifies that the Spring Boot application context loads successfully.
+
+These tests use JUnit 5 and Mockito with H2 for in-memory data.
 
 
 ---
