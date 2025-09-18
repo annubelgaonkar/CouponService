@@ -180,7 +180,7 @@ cd CouponService
 ./mvnw clean test
 
 # run locally
-./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 ### Run with H2 (in-memory DB)
