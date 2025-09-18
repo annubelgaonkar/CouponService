@@ -1,8 +1,9 @@
 # Coupon Service - Assignment
 
 ## Overview
-This assignment implements a backend service for managing and applying discount coupons in an e-commerce setting.  
-It is built using **Java 17**, **Spring Boot**, **PostgreSQL (or H2 for testing)**, **JPA**, **Lombok**, and **JUnit 5 + Mockito** for unit tests.
+This assignment implements a backend service for managing and applying discount coupons in an e-commerce setting.
+It is built using **Java 17**, **Spring Boot**, **H2 (in-memory DB for local/testing)**, **JPA**, **Lombok**, and **JUnit 5 + Mockito** for unit tests.
+
 
 The service supports:
 - CRUD operations for coupons
@@ -167,8 +168,8 @@ Response:
 
 ### Requirements
 - Java 17+
-- PostgreSQL (optional; H2 used for local profile and tests)
 - Maven is not required (Maven wrapper `mvnw` is included)
+- (No DB required — H2 in-memory is used for local runs and tests)
 
 ### Steps
 ```bash
@@ -180,7 +181,8 @@ cd CouponService
 ./mvnw clean test
 
 # run locally
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+./mvnw spring-boot:run                                      # for Linux
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local     # for Mac
 ```
 
 ### Run with H2 (in-memory DB)
